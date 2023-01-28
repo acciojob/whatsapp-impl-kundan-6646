@@ -3,6 +3,7 @@ package com.driver;
 import java.util.*;
 
 import org.springframework.stereotype.Repository;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @Repository
 public class WhatsappRepository {
@@ -32,8 +33,12 @@ public class WhatsappRepository {
         return true;
     }
 
-    public void createUser(String name, String mobile) {
+    public String createUser(String name, String mobile) throws Exception {
+        if(!this.isNewUser(mobile)) {
+            throw new Exception("User already exists");
+        }
         userData.put(mobile, new User(name, mobile));
+        return "SUCCESS";
     }
 
     public Group createGroup(List<User> users) {
@@ -69,6 +74,7 @@ public class WhatsappRepository {
 
         messages.add(message);
         groupMessageMap.put(group, messages);
+        senderMap.put(message, sender);
         return messages.size();
     }
 
@@ -88,6 +94,50 @@ public class WhatsappRepository {
 
         adminMap.put(group, user);
         return "SUCCESS";
+    }
+
+    public int removeUser(User user) throws Exception {
+        Group userRelatedGroup = null;
+        for(Group group: groupUserMap.keySet()) {
+            if(userExistsInGroup(group, user)) {
+                userRelatedGroup = group;
+                break;
+            }
+        }
+
+        if(userRelatedGroup == null) throw new Exception("User not found");
+        if(adminMap.get(userRelatedGroup).equals(user)) throw new Exception("Cannot remove admin");
+
+        List<User> users = groupUserMap.get(userRelatedGroup);
+        List<User> newUsers = new ArrayList<>();
+        for (User u: users) {
+            if(!u.equals(user)) newUsers.add(u);
+        }
+
+        groupUserMap.put(userRelatedGroup, users);
+        HashSet<Message> userMessages = removeAndGetUserMessages(user);
+        List<Message> updatedGroupMessages = new ArrayList<>();
+        List<Message> oldGroupMessages = groupMessageMap.get(userRelatedGroup);
+        for (Message message: oldGroupMessages) {
+            if(!userMessages.contains(message))
+                updatedGroupMessages.add(message);
+        }
+
+        groupMessageMap.put(userRelatedGroup, updatedGroupMessages);
+
+        return groupUserMap.get(userRelatedGroup).size() + groupMessageMap.get(userRelatedGroup).size() + senderMap.size();
+    }
+
+    public HashSet<Message> removeAndGetUserMessages(User user) {
+        HashSet<Message> messages = new HashSet<>();
+        for(Message message: senderMap.keySet()) {
+            if(senderMap.get(message).equals(user)) {
+                messages.add(message);
+                senderMap.remove(message);
+            }
+        }
+
+        return messages;
     }
 
 }
